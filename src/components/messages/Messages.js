@@ -11,7 +11,8 @@ class Messages extends Component {
         channel: this.props.currentChannel,
         messages: [],
         messagesLoading: true,
-        currentUser: this.props.currentUser
+        currentUser: this.props.currentUser,
+        numUniqueUsers: ''
     }
 
     componentDidMount(){
@@ -35,8 +36,21 @@ class Messages extends Component {
                 messages: loadedMessages,
                 messagesLoading: false
             })
-        }) 
-         
+            this.countUniqueUsers(loadedMessages)
+        })    
+    }
+
+    countUniqueUsers = messages => {
+        const uniqueUsers = messages.reduce((acc, message) => {
+            if(!acc.includes(message.user.name)){
+                acc.push(message.user.name)
+            }
+            return acc;
+        }, [])
+
+        const plural = uniqueUsers.length > 1 || uniqueUsers.length  === 0
+        const numUniqueUsers = `${uniqueUsers.length} User${plural ? 's' : ''}`;
+        this.setState({numUniqueUsers})
     }
 
     displayMessages = messages => (
@@ -48,11 +62,14 @@ class Messages extends Component {
             />
         ))
     )
+
+    displayChannelName = channel => channel ? `# ${channel.name}` : '';
+
     render(){
-        const {messagesRef, messages, channel, currentUser} = this.state;
+        const {messagesRef, messages, channel, currentUser, numUniqueUsers} = this.state;
         return (
             <React.Fragment>
-                <MessagesHeader/>
+                <MessagesHeader channelName = {this.displayChannelName(channel)} numUniqueUsers ={numUniqueUsers}/>
                 <Segment>
                     <Comment.Group className="messages">
                         {this.displayMessages(messages)}
