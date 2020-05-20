@@ -1,69 +1,137 @@
 import React, { Component } from "react";
 import { Segment, Comment } from "semantic-ui-react";
-import firebase from '../../firebase';
+import firebase from "../../firebase";
 import MessagesHeader from "./MessagesHeader";
 import MessageForm from "./MessageForm";
 import Message from "./Message";
 
 class Messages extends Component {
-    state = {
-        messagesRef: firebase.database().ref('messages'),
-        channel: this.props.currentChannel,
-        messages: [],
-        messagesLoading: true,
-        currentUser: this.props.currentUser
+  state = {
+    privateChannel: this.props.isPrivateChannel,
+    privateMesssagesRef: firebase.database().ref('privateMessages'),
+    messagesRef: firebase.database().ref("messages"),
+    channel: this.props.currentChannel,
+    messages: [],
+    messagesLoading: true,
+    currentUser: this.props.currentUser,
+    numUniqueUsers: "",
+    searchTerm: "",
+    searchLoading: false,
+    searchResults: []
+  };
+
+  componentDidMount() {
+    const { channel, currentUser } = this.state;
+
+    if (channel && currentUser) {
+      this.addListeners(channel.id);
     }
+  }
 
-    componentDidMount(){
-        const {channel, currentUser} = this.state;
+  addListeners = (channelId) => {
+    this.addMessageListener(channelId);
+  };
 
-        if(channel && currentUser){
-            this.addListeners(channel.id)
-        }
+  addMessageListener = (channelId) => {
+    let loadedMessages = [];
+    const ref = this.getMessagesRef();
+    ref.child(channelId).on("child_added", (snap) => {
+      loadedMessages.push(snap.val());
+      this.setState({
+        messages: loadedMessages,
+        messagesLoading: false,
+      });
+      this.countUniqueUsers(loadedMessages);
+    });
+  };
 
-    }
+  getMessagesRef = () => {
+    const { messagesRef, privateMesssagesRef,privateChannel } = this.state;
+    return privateChannel ? privateMesssagesRef : messagesRef;
+  } 
 
-    addListeners = channelId => {
-        this.addMessageListener(channelId)
-    }
+  handleSearchChange = (event) => {
+    this.setState({
+      searchTerm: event.target.value,
+      searchLoading: true,
+    }, () => this.handleSearchMessages());
+  };
 
-    addMessageListener = channelId => {
-        let loadedMessages = [];
-        this.state.messagesRef.child(channelId).on('child_added', snap => {
-            loadedMessages.push(snap.val())
-            this.setState({
-                messages: loadedMessages,
-                messagesLoading: false
-            })
-        }) 
-         
-    }
+  handleSearchMessages = () => {
+      const channelMessages = [...this.state.messages];
+      const regex = new RegExp(this.state.searchTerm, 'gi');
+      const searchResults = channelMessages.reduce((acc, message) => {
+            if((message.content && message.content.match(regex)) || message.user.name.match(regex)){
+                acc.push(message)
+            }
+            return acc;
+      }, [])
+      this.setState({ searchResults });
+      setTimeout(() => this.setState({ searchLoading: false }), 1000);
+  }
 
-    displayMessages = messages => (
-        messages.length > 0 && messages.map(message => (
-            <Message
-                key ={message.timestamp}
-                message = {message}
-                user = {this.state.currentUser}
-            />
-        ))
-    )
-    render(){
-        const {messagesRef, messages, channel, currentUser} = this.state;
-        return (
-            <React.Fragment>
-                <MessagesHeader/>
-                <Segment>
-                    <Comment.Group className="messages">
-                        {this.displayMessages(messages)}
-                    </Comment.Group>
-                </Segment>
+  countUniqueUsers = (messages) => {
+    const uniqueUsers = messages.reduce((acc, message) => {
+      if (!acc.includes(message.user.name)) {
+        acc.push(message.user.name);
+      }
+      return acc;
+    }, []);
 
-        <MessageForm messagesRef = {messagesRef} currentChannel ={channel} currentUser = {currentUser}/>
+    const plural = uniqueUsers.length > 1 || uniqueUsers.length === 0;
+    const numUniqueUsers = `${uniqueUsers.length} User${plural ? "s" : ""}`;
+    this.setState({ numUniqueUsers });
+  };
 
-            </React.Fragment>
-        )
-    }
+  displayMessages = (messages) =>
+    messages.length > 0 &&
+    messages.map((message) => (
+      <Message
+        key={message.timestamp}
+        message={message}
+        user={this.state.currentUser}
+      />
+    ));
+
+  displayChannelName = (channel) => (channel ? `${this.state.privateChannel ? '@' : '#'}${channel.name}` : '');
+
+  render() {
+    const {
+      messagesRef,
+      messages,
+      channel,
+      currentUser,
+      numUniqueUsers,
+      searchTerm,
+      searchResults,
+      searchLoading,
+      privateChannel
+    } = this.state;
+    return (
+      <React.Fragment>
+        <MessagesHeader
+          handleSearchChange={this.handleSearchChange}
+          channelName={this.displayChannelName(channel)}
+          numUniqueUsers={numUniqueUsers}
+          searchLoading={searchLoading}
+          isPrivateChannel = {privateChannel}
+        />
+        <Segment>
+          <Comment.Group className="messages">
+            { searchTerm ? this.displayMessages(searchResults) : this.displayMessages(messages)}
+          </Comment.Group>
+        </Segment>
+
+        <MessageForm
+          messagesRef={messagesRef}
+          currentChannel={channel}
+          currentUser={currentUser}
+          isPrivateChannel = {this.state.privateChannel}
+          getMessagesRef = {this.getMessagesRef}
+        />
+      </React.Fragment>
+    );
+  }
 }
 
 export default Messages;
